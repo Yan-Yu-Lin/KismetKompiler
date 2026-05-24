@@ -107,7 +107,7 @@ public partial class KismetDecompiler
 
         var modifierText = string.Join(" ", classModifiers).Trim();
         var attributeText = string.Join(", ", classAttributes).Trim();
-        var nameText = $"class {_class.ObjectName} : {classBaseClass}";
+        var nameText = $"class {FormatIdentifier(_class.ObjectName.ToString())} : {FormatIdentifier(classBaseClass)}";
 
         if (!string.IsNullOrWhiteSpace(attributeText))
             attributeText = $"[{attributeText}]";
