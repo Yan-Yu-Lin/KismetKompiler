@@ -387,6 +387,27 @@ static string NormalizeAssetPath(string? path)
     return path;
 }
 
+static bool IsSamePath(string? left, string? right)
+{
+    if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+        return false;
+
+    try
+    {
+        left = Path.GetFullPath(left);
+        right = Path.GetFullPath(right);
+    }
+    catch
+    {
+        // Keep the original strings if the current platform cannot normalize them.
+    }
+
+    return string.Equals(
+        left.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+        right.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+}
+
 static UAsset LoadUAsset(string path, EngineVersion ver, string? usmapPath = default)
 {
     Usmap usmap = default;
@@ -511,11 +532,13 @@ static void Compile(string? inputPath, string scriptPath, EngineVersion ver, str
     var assetFilePath = NormalizeAssetPath(inputPath);
 
     outAssetPath ??= Path.ChangeExtension(scriptPath, ".uasset");
+    var outputIsInputAsset = IsSamePath(outAssetPath, assetFilePath);
     if (File.Exists(outAssetPath))
     {
         if (overwrite)
         {
-            File.Delete(outAssetPath);
+            if (!outputIsInputAsset)
+                File.Delete(outAssetPath);
         }
         else
         {
