@@ -105,8 +105,15 @@ public partial class UAssetLinker : PackageLinker<UAsset>
     protected override FPackageIndex EnsureObjectImported(FPackageIndex parent, string objectName, string className, bool bImportOptional = false)
     {
         var parentImport = parent.ToImport(Package);
+        var classPackageName = className switch
+        {
+            "WidgetBlueprintGeneratedClass" => "/Script/UMG",
+            "BlueprintGeneratedClass" => "/Script/Engine",
+            _ => "/Script/CoreUObject",
+        };
+
         return EnsureImport(
-            classPackageName: "/Script/CoreUObject",
+            classPackageName: classPackageName,
             className: className,
             outerIndex: parent,
             objectName: objectName,

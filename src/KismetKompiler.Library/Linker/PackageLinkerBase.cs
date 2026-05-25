@@ -92,6 +92,24 @@ public abstract partial class PackageLinker<T> where T : UnrealPackage
         return flags;
     }
 
+    protected static int GetStructElementSize(VariableSymbol symbol)
+    {
+        if (symbol.InnerSymbol is not ClassSymbol structSymbol)
+            return 0;
+
+        var packageName = structSymbol.DeclaringPackage?.Name ?? "";
+        return (packageName, structSymbol.Name) switch
+        {
+            ("/Script/FSD", "CharacterSave") => 760,
+            ("/Script/FSD", "FSDLocalizedChatMessage") => 64,
+            ("/Script/CoreUObject", "DateTime") => 8,
+            ("/Script/Slate", "InputChord") => 32,
+            ("/Script/Engine", "LatentActionInfo") => 32,
+            ("/Script/Engine", "PointerToUberGraphFrame") => 8,
+            _ => 0,
+        };
+    }
+
     protected UProperty CreateUProperty(VariableSymbol symbol)
     {
         var serializedType = GetPropertySerializedType(symbol);
@@ -176,7 +194,7 @@ public abstract partial class PackageLinker<T> where T : UnrealPackage
             {
                 Struct = FindPackageIndexInAsset(symbol.InnerSymbol!),
                 ArrayDim = EArrayDim.TArray,
-                ElementSize = 0,
+                ElementSize = GetStructElementSize(symbol),
                 PropertyFlags = propertyFlags,
                 RepNotifyFunc = AddName("None"),
                 BlueprintReplicationCondition = UAssetAPI.FieldTypes.ELifetimeCondition.COND_None,
@@ -370,7 +388,7 @@ public abstract partial class PackageLinker<T> where T : UnrealPackage
 
                 // FProperty values
                 ArrayDim = EArrayDim.TArray,
-                ElementSize = 0, // TODO: depends on the actual size of the struct
+                ElementSize = GetStructElementSize(symbol),
                 PropertyFlags = propertyFlags,
                 RepIndex = 0,
                 RepNotifyFunc = AddName("None"),
@@ -543,6 +561,10 @@ public abstract partial class PackageLinker<T> where T : UnrealPackage
                 throw new NotImplementedException();
             }
         }
+        else if (symbol is ClassSymbol classSymbol && classSymbol.IsExternal)
+        {
+            return FindPackageIndexInAsset(classSymbol);
+        }
         else
         {
             throw new NotImplementedException();
@@ -660,11 +682,24 @@ public abstract partial class PackageLinker<T> where T : UnrealPackage
         if (!TryFindPackageIndexInAsset(symbol, out var packageIndex))
         {
             packageIndex = EnsurePackageImported(symbol.DeclaringPackage?.Name);
-            var importClassName = symbol is ClassSymbol classSymbol ? classSymbol.ImportClassName : "Class";
+            var importClassName = symbol is ClassSymbol classSymbol ? GetImportClassName(classSymbol) : "Class";
             packageIndex = EnsureObjectImported(packageIndex, symbol.Name, importClassName);
         }
 
         return packageIndex;
+    }
+
+    protected static string GetImportClassName(ClassSymbol symbol)
+    {
+        if (symbol.ImportClassName != "Class")
+            return symbol.ImportClassName;
+
+        return symbol.BaseClass?.Name switch
+        {
+            "WidgetBlueprintGeneratedClass" => "WidgetBlueprintGeneratedClass",
+            "BlueprintGeneratedClass" => "BlueprintGeneratedClass",
+            _ => symbol.ImportClassName,
+        };
     }
 
     protected bool TryFindPackageIndexInAsset(Symbol symbol, out FPackageIndex? index)
