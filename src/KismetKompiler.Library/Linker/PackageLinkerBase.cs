@@ -459,7 +459,7 @@ public abstract partial class PackageLinker<T> where T : UnrealPackage
 
         var classExport = Package.FindClassExportByName(symbol.DeclaringClass?.Name);
         var functionExport = Package.FindFunctionExportByName(symbol?.DeclaringProcedure?.Name);
-        var coreUObjectImport = Package.FindImportIndexByObjectName("/Script/CoreUObject") ?? throw new NotImplementedException();
+        var coreUObjectImport = EnsurePackageImported("/Script/CoreUObject");
         var propertyClassImportIndex = EnsureObjectImported(coreUObjectImport, serializedType, "Class");
         var propertyTemplateImportIndex = EnsureObjectImported(coreUObjectImport, $"Default__{serializedType}", serializedType);
 
@@ -660,7 +660,8 @@ public abstract partial class PackageLinker<T> where T : UnrealPackage
         if (!TryFindPackageIndexInAsset(symbol, out var packageIndex))
         {
             packageIndex = EnsurePackageImported(symbol.DeclaringPackage?.Name);
-            packageIndex = EnsureObjectImported(packageIndex, symbol.Name, "Class"); // TODO classname
+            var importClassName = symbol is ClassSymbol classSymbol ? classSymbol.ImportClassName : "Class";
+            packageIndex = EnsureObjectImported(packageIndex, symbol.Name, importClassName);
         }
 
         return packageIndex;
@@ -704,6 +705,12 @@ public abstract partial class PackageLinker<T> where T : UnrealPackage
         {
             index = classLocalCandidates[0].PackageIndex;
             return true;
+        }
+
+        if (symbol.IsExternal &&
+            (!string.IsNullOrWhiteSpace(packageName) || !string.IsNullOrWhiteSpace(className)))
+        {
+            return false;
         }
 
         var localCandidates = GetPackageIndexByLocalName(localName).ToList();

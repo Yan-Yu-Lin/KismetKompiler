@@ -44,6 +44,12 @@ public partial class KismetScriptCompiler
 
     public bool StrictMode { get; set; }
 
+    public bool AutoImportEnabled { get; set; } = true;
+
+    public AutoImportManifest? AutoImportManifest { get; set; }
+
+    public Action<string>? DiagnosticSink { get; set; }
+
     public KismetScriptCompiler()
     {
         _contextStack = new();
@@ -383,7 +389,23 @@ public partial class KismetScriptCompiler
             }
         }
 
+        IEnumerable<Symbol> GetImportGlobalSymbols(Symbol symbol)
+        {
+            yield return symbol;
+            foreach (var item in symbol.Members)
+            {
+                if (item.DeclaringClass != null)
+                {
+                    // Do not globally declare class properties
+                    continue;
+                }
+                foreach (var sub in GetImportGlobalSymbols(item))
+                    yield return sub;
+            }
+        }
+
         // Declare the global symbols present in the package imports
+        var importedGlobalSymbols = new List<Symbol>();
         foreach ((var packagePath, var declarations) in packageImports)
         {
             var packageSymbol = new PackageSymbol()
@@ -395,29 +417,19 @@ public partial class KismetScriptCompiler
             foreach (var item in declarations)
                 CreateDeclarationSymbol(item, packageSymbol, true);
 
-            // Declare package, classes and (static) functions as global symbols
-            // but only if they're unambigious-- two imports can not have the same key
-            // TODO: differenciate between static class functions and instance functions
-            IEnumerable<Symbol> GetImportGlobalSymbols(Symbol symbol)
-            {
-                yield return symbol;
-                foreach (var item in symbol.Members)
-                {
-                    if (item.DeclaringClass != null)
-                    {
-                        // Do not globally declare class properties
-                        continue;
-                    }
-                    foreach (var sub in GetImportGlobalSymbols(item))
-                        yield return sub;
-                }
-            }
+            importedGlobalSymbols.AddRange(GetImportGlobalSymbols(packageSymbol));
+        }
 
-            var globalSymbols = GetImportGlobalSymbols(packageSymbol);
-            var distinctGlobalSymbols = globalSymbols
-                .DistinctBy(x => x.Key);
-            foreach (var symbol in distinctGlobalSymbols)
+        // Declare package, classes and (static) functions as global symbols
+        // but only if they're unambiguous-- two imports can not have the same key.
+        // TODO: differentiate between static class functions and instance functions.
+        foreach (var group in importedGlobalSymbols.GroupBy(x => x.Key))
+        {
+            if (group.Count() == 1)
+            {
+                var symbol = group.Single();
                 DeclareSymbol(symbol);
+            }
         }
 
         foreach (var declaration in compilationUnit.Declarations
@@ -443,6 +455,8 @@ public partial class KismetScriptCompiler
 
             DeclareUbergraphFunctionGlobalSymbols(declarationSymbol);
         }
+
+        ApplyAutoImports(compilationUnit);
 
         void ResolveSymbolReferences(Symbol symbol)
         {
@@ -2772,6 +2786,22 @@ public partial class KismetScriptCompiler
             label = GetSymbol<LabelSymbol>(identifier.Text);
             if (label != null)
             {
+                return true;
+            }
+
+            var suffixStart = identifier.Text.LastIndexOf('_');
+            if (suffixStart >= 0 &&
+                suffixStart < identifier.Text.Length - 1 &&
+                int.TryParse(identifier.Text[(suffixStart + 1)..], out var codeOffset))
+            {
+                label = new LabelSymbol(null)
+                {
+                    DeclaringSymbol = null,
+                    IsExternal = false,
+                    Name = identifier.Text,
+                    CodeOffset = codeOffset,
+                    IsResolved = true,
+                };
                 return true;
             }
         }

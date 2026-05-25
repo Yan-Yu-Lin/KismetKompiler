@@ -257,6 +257,8 @@ namespace KismetKompiler.Library.Compiler.Context
         public bool IsInterface { get; internal set; }
 
         public bool IsStatic => Declaration.Modifiers.HasFlag(ClassModifiers.Static);
+
+        public string ImportClassName { get; init; } = "Class";
     }
 
     public class EnumSymbol : DeclaredSymbol<EnumDeclaration>, IExportSymbol

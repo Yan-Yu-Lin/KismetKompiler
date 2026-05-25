@@ -93,41 +93,25 @@ public partial class UAssetLinker : PackageLinker<UAsset>
         if (objectName == null)
             return FPackageIndex.Null;
 
-        var import = Package.FindImportByObjectName(objectName);
-        if (import == null)
-        {
-            import = new Import()
-            {
-                ObjectName = new(Package, objectName),
-                OuterIndex = FPackageIndex.Null,
-                ClassPackage = new(Package, objectName),
-                ClassName = new(Package, "Package"),
-                bImportOptional = bImportOptional
-            };
-            Package.Imports.Add(import);
-        }
-
-        return FPackageIndex.FromImport(Package.Imports.IndexOf(import));
+        return EnsureImport(
+            classPackageName: "/Script/CoreUObject",
+            className: "Package",
+            outerIndex: FPackageIndex.Null,
+            objectName: objectName,
+            bImportOptional: bImportOptional,
+            legacyClassPackageName: objectName);
     }
 
     protected override FPackageIndex EnsureObjectImported(FPackageIndex parent, string objectName, string className, bool bImportOptional = false)
     {
-        var import = Package.FindImportByObjectName(objectName);
-        if (import == null)
-        {
-            var parentImport = parent.ToImport(Package);
-            import = new Import()
-            {
-                ObjectName = new(Package, objectName),
-                OuterIndex = parent,
-                ClassPackage = parentImport.ObjectName,
-                ClassName = new(Package, className),
-                bImportOptional = bImportOptional
-            };
-            Package.Imports.Add(import);
-        }
-
-        return FPackageIndex.FromImport(Package.Imports.IndexOf(import));
+        var parentImport = parent.ToImport(Package);
+        return EnsureImport(
+            classPackageName: "/Script/CoreUObject",
+            className: className,
+            outerIndex: parent,
+            objectName: objectName,
+            bImportOptional: bImportOptional,
+            legacyClassPackageName: parentImport.ObjectName.ToString());
     }
 
     public override UAssetLinker LinkCompiledScript(CompiledScriptContext scriptContext)
@@ -197,16 +181,59 @@ public partial class UAssetLinker : PackageLinker<UAsset>
 
     protected override FPackageIndex CreateProcedureImport(ProcedureSymbol symbol)
     {
+        return EnsureImport(
+            classPackageName: "/Script/CoreUObject",
+            className: "Function",
+            outerIndex: FindPackageIndexInAsset(symbol?.DeclaringClass),
+            objectName: symbol.Name,
+            bImportOptional: false);
+    }
+
+    private FPackageIndex EnsureImport(
+        string classPackageName,
+        string className,
+        FPackageIndex outerIndex,
+        string objectName,
+        bool bImportOptional,
+        string? legacyClassPackageName = null)
+    {
+        var importIndex = FindImportIndex(classPackageName, className, outerIndex, objectName);
+        if (importIndex.IsNull() && legacyClassPackageName != null)
+            importIndex = FindImportIndex(legacyClassPackageName, className, outerIndex, objectName);
+
+        if (!importIndex.IsNull())
+            return importIndex;
+
         var import = new Import()
         {
-            ObjectName = new(Package, symbol.Name),
-            OuterIndex = FindPackageIndexInAsset(symbol?.DeclaringClass),
-            ClassPackage = new(Package, symbol?.DeclaringPackage?.Name),
-            ClassName = new(Package, "Function"),
-            bImportOptional = false
+            ObjectName = new(Package, objectName),
+            OuterIndex = outerIndex,
+            ClassPackage = new(Package, classPackageName),
+            ClassName = new(Package, className),
+            bImportOptional = bImportOptional
         };
-        Package.Imports.Add(import);
-        return FPackageIndex.FromImport(Package.Imports.IndexOf(import));
+        return Package.AddImport(import);
+    }
+
+    private FPackageIndex FindImportIndex(
+        string classPackageName,
+        string className,
+        FPackageIndex outerIndex,
+        string objectName)
+    {
+        for (var i = 0; i < Package.Imports.Count; i++)
+        {
+            var import = Package.Imports[i];
+            if (import.ClassPackage.ToString() == classPackageName &&
+                import.ClassName.ToString() == className &&
+                import.OuterIndex.Index == outerIndex.Index &&
+                import.ObjectName.ToString() == objectName)
+            {
+                return FPackageIndex.FromImport(i);
+            }
+        }
+
+        return FPackageIndex.Null;
     }
 
     protected override IEnumerable<(object ImportOrExport, FPackageIndex PackageIndex)> GetPackageIndexByLocalName(string name)

@@ -4,6 +4,7 @@ using KismetKompiler.Library.Syntax.Statements.Declarations;
 using KismetKompiler.Library.Syntax.Statements.Expressions;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Binary;
 using KismetKompiler.Library.Syntax.Statements.Expressions.Identifiers;
+using KismetKompiler.Library.Syntax.Statements.Expressions.Literals;
 using System.Diagnostics;
 using System.Xml.Linq;
 using UAssetAPI.ExportTypes;
@@ -31,16 +32,18 @@ public class TypeResolver
     {
         private readonly DeclarationScope _parent;
 
-        private readonly Dictionary<string, Declaration> _declarations;
+        private readonly Dictionary<DeclarationKey, Declaration> _declarations;
+        private readonly Dictionary<string, List<Declaration>> _declarationsByName;
 
         public DeclarationScope(DeclarationScope parent)
         {
             _parent = parent;
-            _declarations = new Dictionary<string, Declaration>();
+            _declarations = new Dictionary<DeclarationKey, Declaration>();
+            _declarationsByName = new Dictionary<string, List<Declaration>>();
         }
 
         public bool IsDeclaredLocally(string name)
-            => _declarations.ContainsKey(name);
+            => _declarationsByName.ContainsKey(name);
 
         public bool IsDeclaredInScope(string name)
         {
@@ -51,22 +54,80 @@ public class TypeResolver
 
         public bool TryRegisterDeclarationLocally(Declaration declaration)
         {
-            if (IsDeclaredLocally(declaration.Identifier.Text))
+            var key = GetDeclarationKey(declaration);
+            if (_declarations.ContainsKey(key))
                 return false;
 
-            _declarations[declaration.Identifier.Text] = declaration;
+            _declarations[key] = declaration;
+            if (!_declarationsByName.TryGetValue(declaration.Identifier.Text, out var declarations))
+            {
+                declarations = new();
+                _declarationsByName[declaration.Identifier.Text] = declarations;
+            }
+            declarations.Add(declaration);
             return true;
         }
 
         public bool TryGetDeclarationLocally(string name, out Declaration? declaration)
-            => _declarations.TryGetValue(name, out declaration);
+        {
+            if (!_declarationsByName.TryGetValue(name, out var declarations))
+            {
+                declaration = null;
+                return false;
+            }
+
+            declaration = GetUnambiguousDeclaration(declarations);
+            return declaration != null;
+        }
 
         public bool TryGetDeclarationInScope(string name, out Declaration? declaration)
         {
-            if (!_declarations.TryGetValue(name, out declaration))
-                return _parent?.TryGetDeclarationInScope(name, out declaration) ?? false;
-            return true;
+            if (_declarationsByName.TryGetValue(name, out var declarations))
+            {
+                declaration = GetUnambiguousDeclaration(declarations);
+                return declaration != null;
+            }
+
+            if (_parent != null)
+                return _parent.TryGetDeclarationInScope(name, out declaration);
+
+            declaration = null;
+            return false;
         }
+
+        private static Declaration? GetUnambiguousDeclaration(IReadOnlyList<Declaration> declarations)
+        {
+            var localDeclarations = declarations
+                .Where(x => GetImportPackagePath(x) == null)
+                .ToList();
+            if (localDeclarations.Count == 1)
+                return localDeclarations[0];
+
+            if (localDeclarations.Count > 1)
+                return null;
+
+            return declarations.Count == 1 ? declarations[0] : null;
+        }
+
+        private static DeclarationKey GetDeclarationKey(Declaration declaration)
+        {
+            return new DeclarationKey(
+                declaration.Identifier.Text,
+                declaration.DeclarationType,
+                GetImportPackagePath(declaration));
+        }
+
+        private static string? GetImportPackagePath(Declaration declaration)
+        {
+            var importAttribute = declaration.Attributes
+                .FirstOrDefault(x => x.Identifier.Text == "Import");
+            if (importAttribute?.Arguments.Count != 1)
+                return null;
+
+            return (importAttribute.Arguments[0].Expression as StringLiteral)?.Value;
+        }
+
+        private readonly record struct DeclarationKey(string Name, DeclarationType Type, string? ImportPackagePath);
     }
 
 

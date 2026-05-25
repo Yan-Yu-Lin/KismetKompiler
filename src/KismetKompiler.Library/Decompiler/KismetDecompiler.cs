@@ -137,6 +137,12 @@ public partial class KismetDecompiler
 
         void WriteImport(Symbol symbol)
         {
+            if (symbol.Import == null &&
+                symbol.Flags.HasFlag(SymbolFlags.InferredFromImportClassName))
+            {
+                return;
+            }
+
             if (symbol.Parent == null)
             {
                 if (symbol.Class?.Name != "Package")
@@ -177,8 +183,9 @@ public partial class KismetDecompiler
                         if (!string.IsNullOrWhiteSpace(modifierText))
                             modifierText += " ";
 
-                        if (symbol.Super != null)
-                            _writer.WriteLine($"{modifierText}class {FormatIdentifier(symbol.Name)} : {FormatIdentifier(symbol.Super.Name)} {{");
+                        var superSymbol = GetImportSuperSymbol(symbol);
+                        if (superSymbol != null)
+                            _writer.WriteLine($"{modifierText}class {FormatIdentifier(symbol.Name)} : {FormatIdentifier(superSymbol.Name)} {{");
                         else
                             _writer.WriteLine($"{modifierText}class {FormatIdentifier(symbol.Name)} {{");
                         _writer.Push();
@@ -263,9 +270,10 @@ public partial class KismetDecompiler
                             _writer.WriteLine($"public {FormatIdentifier(symbol.Class.Name)} {FormatIdentifier(symbol.Name)};");
                         else
                         {
-                            if (symbol.Super != null)
+                            var superSymbol = GetImportSuperSymbol(symbol);
+                            if (superSymbol != null)
                             {
-                                _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} : {FormatIdentifier(symbol.Super.Name)} {{}}");
+                                _writer.WriteLine($"public class {FormatIdentifier(symbol.Name)} : {FormatIdentifier(superSymbol.Name)} {{}}");
                             }
                             else
                             {
@@ -285,6 +293,21 @@ public partial class KismetDecompiler
             WriteImport(symbol);
 
         _writer.WriteLine();
+    }
+
+    private Symbol? GetImportSuperSymbol(Symbol symbol)
+    {
+        if (symbol.Super != null)
+            return symbol.Super;
+
+        if (symbol.Class != null &&
+            symbol.Class != symbol &&
+            symbol.Class.Name is "BlueprintGeneratedClass" or "WidgetBlueprintGeneratedClass")
+        {
+            return symbol.Class;
+        }
+
+        return null;
     }
 
     public string DecompileFunction(FunctionExport function)

@@ -40,7 +40,7 @@ CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions, SdkO
         var version = ParseVersion(o.VersionString);
         try
         {
-            Compile(o.InputAssetFilePath, o.InputPath, version, o.UsmapFilePath, o.OutputPath, o.Overwrite, o.NoStrict, o.GlobalFilePath);
+            Compile(o.InputAssetFilePath, o.InputPath, version, o.UsmapFilePath, o.OutputPath, o.Overwrite, o.NoStrict, o.GlobalFilePath, o.AutoImport && !o.NoAutoImport, o.AutoImportManifestPath);
             Console.WriteLine($"Done.");
         }
         catch (ApplicationException ex)
@@ -506,7 +506,7 @@ static void Decompile(string inputPath, EngineVersion ver, string? usmapPath = d
     }
 }
 
-static void Compile(string? inputPath, string scriptPath, EngineVersion ver, string? usmapPath = default, string? outAssetPath = default, bool overwrite = false, bool noStrict = false, string? globalPath = default)
+static void Compile(string? inputPath, string scriptPath, EngineVersion ver, string? usmapPath = default, string? outAssetPath = default, bool overwrite = false, bool noStrict = false, string? globalPath = default, bool autoImport = true, string? autoImportManifestPath = default)
 {
     var assetFilePath = NormalizeAssetPath(inputPath);
 
@@ -525,7 +525,7 @@ static void Compile(string? inputPath, string scriptPath, EngineVersion ver, str
     }
 
     Console.WriteLine($"Compiling {scriptPath}");
-    var script = CompileScript(scriptPath, noStrict, ver);
+    var script = CompileScript(scriptPath, noStrict, ver, autoImport, autoImportManifestPath);
 
     UnrealPackage newAsset;
     if (assetFilePath != null)
@@ -579,7 +579,7 @@ static void PrintSyntaxError(int lineNumber, int startIndex, int endIndex, strin
     Console.WriteLine(new string(' ', messagePrefix.Length) + highlightedLine);
 }
 
-static CompiledScriptContext CompileScript(string inPath, bool noStrict, EngineVersion engineVersion)
+static CompiledScriptContext CompileScript(string inPath, bool noStrict, EngineVersion engineVersion, bool autoImport = true, string? autoImportManifestPath = default)
 {
     using var textStream = new StreamReader(inPath);
     var inputStream = new AntlrInputStream(textStream);
@@ -602,6 +602,10 @@ static CompiledScriptContext CompileScript(string inPath, bool noStrict, EngineV
         var compiler = new KismetScriptCompiler();
         compiler.EngineVersion = engineVersion;
         compiler.StrictMode = !noStrict;
+        compiler.AutoImportEnabled = autoImport;
+        if (!string.IsNullOrWhiteSpace(autoImportManifestPath))
+            compiler.AutoImportManifest = AutoImportManifest.Load(autoImportManifestPath);
+        compiler.DiagnosticSink = Console.WriteLine;
         var script = compiler.CompileCompilationUnit(compilationUnit);
         return script;
     }
@@ -733,6 +737,15 @@ class CompileOptions : OptionsBase
 
     [Option("no-strict", Required = false, HelpText = "Allow the compiler to be less strict when evaluating scoping rules as a workaround for unknown symbol errors.")]
     public bool NoStrict { get; set; } = false;
+
+    [Option("auto-import", Required = false, Default = true, HelpText = "Automatically synthesize known imports referenced by the script.")]
+    public bool AutoImport { get; set; } = true;
+
+    [Option("no-auto-import", Required = false, HelpText = "Disable automatic import synthesis.")]
+    public bool NoAutoImport { get; set; } = false;
+
+    [Option("auto-import-manifest", Required = false, HelpText = "Path to a JSON auto-import manifest.")]
+    public string? AutoImportManifestPath { get; set; }
 }
 
 [Verb("decompile", HelpText = "Decompile a blueprint asset")]
