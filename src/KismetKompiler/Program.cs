@@ -40,7 +40,7 @@ CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions, SdkO
         var version = ParseVersion(o.VersionString);
         try
         {
-            Compile(o.InputAssetFilePath, o.InputPath, version, o.UsmapFilePath, o.OutputPath, o.Overwrite, o.NoStrict, o.GlobalFilePath, o.AutoImport && !o.NoAutoImport, o.AutoImportManifestPath);
+            Compile(o.InputAssetFilePath, o.InputPath, version, o.UsmapFilePath, o.OutputPath, o.Overwrite, o.NoStrict, o.GlobalFilePath, o.AutoImport && !o.NoAutoImport, o.AutoImportManifestPath, o.FunctionName);
             Console.WriteLine($"Done.");
         }
         catch (ApplicationException ex)
@@ -532,9 +532,11 @@ static void Decompile(string inputPath, EngineVersion ver, string? usmapPath = d
     }
 }
 
-static void Compile(string? inputPath, string scriptPath, EngineVersion ver, string? usmapPath = default, string? outAssetPath = default, bool overwrite = false, bool noStrict = false, string? globalPath = default, bool autoImport = true, string? autoImportManifestPath = default)
+static void Compile(string? inputPath, string scriptPath, EngineVersion ver, string? usmapPath = default, string? outAssetPath = default, bool overwrite = false, bool noStrict = false, string? globalPath = default, bool autoImport = true, string? autoImportManifestPath = default, string? functionName = default)
 {
     var assetFilePath = NormalizeAssetPath(inputPath);
+    if (functionName != null && (assetFilePath == null || !File.Exists(assetFilePath)))
+        throw new ApplicationException("--function requires an existing --asset template.");
 
     outAssetPath ??= Path.ChangeExtension(scriptPath, ".uasset");
     var outputIsInputAsset = IsSamePath(outAssetPath, assetFilePath);
@@ -553,7 +555,7 @@ static void Compile(string? inputPath, string scriptPath, EngineVersion ver, str
     }
 
     Console.WriteLine($"Compiling {scriptPath}");
-    var script = CompileScript(scriptPath, noStrict, ver, autoImport, autoImportManifestPath);
+    var script = CompileScript(scriptPath, noStrict, ver, autoImport, autoImportManifestPath, functionName);
 
     UnrealPackage newAsset;
     if (assetFilePath != null)
@@ -607,7 +609,7 @@ static void PrintSyntaxError(int lineNumber, int startIndex, int endIndex, strin
     Console.WriteLine(new string(' ', messagePrefix.Length) + highlightedLine);
 }
 
-static CompiledScriptContext CompileScript(string inPath, bool noStrict, EngineVersion engineVersion, bool autoImport = true, string? autoImportManifestPath = default)
+static CompiledScriptContext CompileScript(string inPath, bool noStrict, EngineVersion engineVersion, bool autoImport = true, string? autoImportManifestPath = default, string? functionName = default)
 {
     using var textStream = new StreamReader(inPath);
     var inputStream = new AntlrInputStream(textStream);
@@ -631,6 +633,7 @@ static CompiledScriptContext CompileScript(string inPath, bool noStrict, EngineV
         compiler.EngineVersion = engineVersion;
         compiler.StrictMode = !noStrict;
         compiler.AutoImportEnabled = autoImport;
+        compiler.FunctionFilter = functionName;
         if (!string.IsNullOrWhiteSpace(autoImportManifestPath))
             compiler.AutoImportManifest = AutoImportManifest.Load(autoImportManifestPath);
         compiler.DiagnosticSink = Console.WriteLine;
@@ -774,6 +777,9 @@ class CompileOptions : OptionsBase
 
     [Option("auto-import-manifest", Required = false, HelpText = "Path to a JSON auto-import manifest.")]
     public string? AutoImportManifestPath { get; set; }
+
+    [Option("function", Required = false, HelpText = "Compile one exact function into an existing asset, retaining other function bodies.")]
+    public string? FunctionName { get; set; }
 }
 
 [Verb("decompile", HelpText = "Decompile a blueprint asset")]

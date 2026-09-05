@@ -23,6 +23,11 @@ namespace KismetKompiler.Library.Compiler;
 /// </summary>
 public partial class KismetScriptCompiler
 {
+    /// <summary>
+    /// Optional exact function name to compile. Other declarations remain in
+    /// the symbol table but their bodies are not rebuilt.
+    /// </summary>
+    public string? FunctionFilter { get; set; }
     private ObjectVersion _objectVersion = 0;
     private CompilationUnit _compilationUnit;
     private ClassContext _classContext;
@@ -212,6 +217,9 @@ public partial class KismetScriptCompiler
         CompileScript(compilationUnit, script);
         PopScope();
 
+        if (FunctionFilter != null &&
+            script.Functions.Count + script.Classes.Sum(c => c.Functions.Count) != 1)
+            throw new ApplicationException($"Expected exactly one function named {FunctionFilter}.");
         return script;
     }
 
@@ -228,7 +236,8 @@ public partial class KismetScriptCompiler
         {
             if (declaration is ProcedureDeclaration procedureDeclaration)
             {
-                script.Functions.Add(CompileFunction(procedureDeclaration));
+                if (FunctionFilter == null || procedureDeclaration.Identifier.Text == FunctionFilter)
+                    script.Functions.Add(CompileFunction(procedureDeclaration));
             }
             else if (declaration is VariableDeclaration variableDeclaration)
             {
@@ -596,7 +605,8 @@ public partial class KismetScriptCompiler
                 {
                     if (declaration is ProcedureDeclaration procedureDeclaration)
                     {
-                        functions.Add(CompileFunction(procedureDeclaration));
+                        if (FunctionFilter == null || procedureDeclaration.Identifier.Text == FunctionFilter)
+                            functions.Add(CompileFunction(procedureDeclaration));
                     }
                     else if (declaration is VariableDeclaration variableDeclaration)
                     {
