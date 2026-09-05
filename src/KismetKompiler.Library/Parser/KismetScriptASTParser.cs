@@ -1870,7 +1870,7 @@ public class KismetScriptASTParser
     private bool TryParseStringLiteral(ITerminalNode node, out StringLiteral literal)
     {
         literal = CreateAstNode<StringLiteral>(node);
-        literal.Value = node.Symbol.Text.Trim('\"');
+        literal.Value = KismetStringLiteral.Decode(node.Symbol.Text);
 
         return true;
     }

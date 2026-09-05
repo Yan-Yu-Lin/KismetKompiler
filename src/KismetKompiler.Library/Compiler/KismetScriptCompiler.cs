@@ -2422,7 +2422,13 @@ public partial class KismetScriptCompiler
     {
         pointer = null;
 
-        if (expression is StringLiteral stringLiteral)
+        // A zero property-reference argument preserves a serialized null pointer.
+        // It is distinct from the assignment destination inferred by normal '='.
+        if (expression is IntLiteral { Value: 0 })
+        {
+            pointer = new KismetPropertyPointer { Old = FPackageIndex.Null, New = FFieldPath.Null };
+        }
+        else if (expression is StringLiteral stringLiteral)
         {
             pointer = GetPropertyPointer(stringLiteral, stringLiteral.Value);
         }

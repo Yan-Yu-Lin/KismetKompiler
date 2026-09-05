@@ -46,6 +46,7 @@ CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions, SdkO
         catch (ApplicationException ex)
         {
             Console.WriteLine(ex.Message);
+            Environment.ExitCode = 1;
         }
     })
     .WithParsed<DecompileOptions>(o =>
@@ -59,6 +60,7 @@ CommandLine.Parser.Default.ParseArguments<CompileOptions, DecompileOptions, SdkO
          catch (ApplicationException ex)
          {
              Console.WriteLine(ex.Message);
+             Environment.ExitCode = 1;
          }
      })
     .WithParsed<SdkOptions>(o =>
@@ -520,10 +522,13 @@ static void Decompile(string inputPath, EngineVersion ver, string? usmapPath = d
         }
 
         Console.WriteLine($"{assetFiles.Count - failed}/{assetFiles.Count} decompiled successfully");
+        if (failed != 0)
+            Environment.ExitCode = 1;
     }
     else
     {
-        DecompileFile(inputPath, ver, usmapPath, outScriptPath, overwrite, noVerification, noStrict, globalPath);
+        if (!DecompileFile(inputPath, ver, usmapPath, outScriptPath, overwrite, noVerification, noStrict, globalPath))
+            Environment.ExitCode = 1;
     }
 }
 

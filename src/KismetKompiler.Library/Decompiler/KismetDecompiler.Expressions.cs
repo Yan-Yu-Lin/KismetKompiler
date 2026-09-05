@@ -29,7 +29,7 @@ namespace KismetKompiler.Decompiler
                         if (!string.IsNullOrWhiteSpace(elements))
                             return $"EX_SetSet({setProperty}, {elements})";
                         else
-                            return $"EX_SetSet()";
+                            return $"EX_SetSet({setProperty})";
                     }
                 case EX_SetConst expr:
                     {
@@ -38,7 +38,7 @@ namespace KismetKompiler.Decompiler
                         if (!string.IsNullOrWhiteSpace(elements))
                             return $"EX_SetConst({innerProperty}, {elements})";
                         else
-                            return $"EX_SetConst()";
+                            return $"EX_SetConst({innerProperty})";
                     }
                 case EX_SetMap expr:
                     {
@@ -47,7 +47,7 @@ namespace KismetKompiler.Decompiler
                         if (!string.IsNullOrWhiteSpace(elems))
                             return $"EX_SetMap({prop}, {elems})";
                         else
-                            return $"EX_SetMap()";
+                            return $"EX_SetMap({prop})";
                     }
                 case EX_MapConst expr:
                     {
@@ -79,9 +79,12 @@ namespace KismetKompiler.Decompiler
                     }
                 case EX_Let expr:
                     {
-                        var value = FormatIdentifier(_asset.GetPropertyName(expr.Value, _useFullPropertyNames));
                         var variable = FormatExpression(expr.Variable, expr);
                         var expression = FormatExpression(expr.Expression, expr);
+                        if ((expr.Value.Old?.IsNull() ?? true) &&
+                            (expr.Value.New == null || (expr.Value.New.Path.Length == 0 &&
+                                                       expr.Value.New.ResolvedOwner.IsNull())))
+                            return $"EX_Let(0, {variable}, {expression})";
                         return $"{variable} = {expression}";
                     }
                 case EX_LetObj expr:
@@ -112,7 +115,11 @@ namespace KismetKompiler.Decompiler
                     {
                         var structExpression = FormatExpression(expr.StructExpression, expr);
                         var structMemberExpression = FormatIdentifier(_asset.GetPropertyName(expr.StructMemberExpression, _useFullPropertyNames));
-                        return $"{structExpression}.{structMemberExpression}";
+                        // Dot syntax can be reinterpreted as object-context access
+                        // when an imported native struct's type is unavailable.
+                        // The first argument is a property reference, not evaluated;
+                        // retain its owner so the compiler resolves the field symbol.
+                        return $"EX_StructMemberContext({structExpression}.{structMemberExpression}, {structExpression})";
                     }
                 case EX_LetDelegate expr:
                     {

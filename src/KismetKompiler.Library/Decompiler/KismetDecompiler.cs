@@ -720,9 +720,7 @@ public partial class KismetDecompiler
 
     private string FormatString(string value)
     {
-        if (value.Contains("\\"))
-            value = value.Replace("\\", "\\\\");
-        return $"\"{value}\"";
+        return KismetStringLiteral.Encode(value);
     }
 
     private string GetDecompiledPropertyText(IPropertyData prop)
