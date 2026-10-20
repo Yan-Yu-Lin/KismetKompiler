@@ -206,6 +206,14 @@ public class MemberAccessTrackingVisitor : KismetExpressionVisitor
                 }
                 break;
 
+            case EX_DefaultVariable defaultVariable:
+                {
+                    // Default-object property read (e.g. Projectile CDO FireRate in DRG WPN_LineCutter.GetGearStatEntry).
+                    // Printed as the EX_DefaultVariable intrinsic; only needs a cached symbol for the enclosing EX_Context.
+                    _expressionSymbolCache[defaultVariable] = EnsurePropertySymbolCreated(defaultVariable.Variable);
+                }
+                break;
+
             case EX_Let let:
                 {
                     var member = EnsurePropertySymbolCreated(let.Value);

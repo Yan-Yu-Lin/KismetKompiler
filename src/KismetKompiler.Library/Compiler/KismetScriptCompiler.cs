@@ -28,6 +28,11 @@ public partial class KismetScriptCompiler
     /// the symbol table but their bodies are not rebuilt.
     /// </summary>
     public string? FunctionFilter { get; set; }
+
+    // "A|B|C" compiles several exact function names in one pass, so labels in one (e.g. an ubergraph) resolve
+    // for the stubs that jump into it.
+    private bool FunctionSelected(string name)
+        => FunctionFilter == null || FunctionFilter.Split('|').Contains(name);
     private ObjectVersion _objectVersion = 0;
     private CompilationUnit _compilationUnit;
     private ClassContext _classContext;
@@ -218,8 +223,8 @@ public partial class KismetScriptCompiler
         PopScope();
 
         if (FunctionFilter != null &&
-            script.Functions.Count + script.Classes.Sum(c => c.Functions.Count) != 1)
-            throw new ApplicationException($"Expected exactly one function named {FunctionFilter}.");
+            script.Functions.Count + script.Classes.Sum(c => c.Functions.Count) != FunctionFilter.Split('|').Length)
+            throw new ApplicationException($"Expected exactly one function for each name in {FunctionFilter}.");
         return script;
     }
 
@@ -236,7 +241,7 @@ public partial class KismetScriptCompiler
         {
             if (declaration is ProcedureDeclaration procedureDeclaration)
             {
-                if (FunctionFilter == null || procedureDeclaration.Identifier.Text == FunctionFilter)
+                if (FunctionSelected(procedureDeclaration.Identifier.Text))
                     script.Functions.Add(CompileFunction(procedureDeclaration));
             }
             else if (declaration is VariableDeclaration variableDeclaration)
@@ -605,7 +610,7 @@ public partial class KismetScriptCompiler
                 {
                     if (declaration is ProcedureDeclaration procedureDeclaration)
                     {
-                        if (FunctionFilter == null || procedureDeclaration.Identifier.Text == FunctionFilter)
+                        if (FunctionSelected(procedureDeclaration.Identifier.Text))
                             functions.Add(CompileFunction(procedureDeclaration));
                     }
                     else if (declaration is VariableDeclaration variableDeclaration)

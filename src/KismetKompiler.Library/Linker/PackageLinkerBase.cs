@@ -94,6 +94,11 @@ public abstract partial class PackageLinker<T> where T : UnrealPackage
 
     protected static int GetStructElementSize(VariableSymbol symbol)
     {
+        // Roll Control Fix alpha.2: decompiled scripts declare the engine structs as '[Import("/Script/CoreUObject")]
+        // public ScriptStruct Vector;' (a variable symbol, not a class), so match these by the type name.
+        var typeName = symbol.Declaration?.Type is { } t ? (t.IsConstructedType ? t.TypeParameter.Text : t.Text) : "";
+        if (typeName == "Vector" || typeName == "Rotator")
+            return 12;
         if (symbol.InnerSymbol is not ClassSymbol structSymbol)
             return 0;
 
@@ -1201,6 +1206,6 @@ public abstract partial class PackageLinker<T> where T : UnrealPackage
         return Package;
     }
 
-    [GeneratedRegex("_(\\d+)")]
+    [GeneratedRegex("_(\\d+)$")]
     private static partial Regex NameIdSuffix();
 }

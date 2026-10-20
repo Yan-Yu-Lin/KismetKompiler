@@ -300,6 +300,6 @@ public partial class UAssetLinker : PackageLinker<UAsset>
         return Package;
     }
 
-    [GeneratedRegex("_(\\d+)")]
+    [GeneratedRegex("_(\\d+)$")]
     private static partial Regex NameIdSuffix();
 }
